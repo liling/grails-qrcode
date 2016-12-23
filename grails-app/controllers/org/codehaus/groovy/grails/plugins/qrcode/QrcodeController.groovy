@@ -22,35 +22,51 @@ class QrcodeController {
   /**
    * Renders a QRCode that contains the Referer URL that you just came from
    */
-  def index = {
-    def referer = request.getHeader("REFERER")
-    String size = getSize(params)
-    qrCodeService.renderPng(response,params.url?:params.text?:referer?:backupText, size?.toInteger())
+  def index(String url, String text) {
+    try { 
+      renderPng(url ?: text ?: request.getHeader("REFERER") ?: BACKUP_TEXT)
+    } catch (e) {
+        render status: 400, text: e.message
+    }
   }
 
   /**
    * Renders a QRCode with the URL specified
    */
-  def url = {
-    String uri = params.u?:params.id?:request.getHeader("REFERER")
-    String size = getSize(params)
-    qrCodeService.renderPng(response, uri, size.toInteger().intValue())
-  }
-
-  private String getSize(Map params) {
-    String size = params.s?:params.size?:params.w?:params.width
-    if (!size || size.matches(/\D/)) { size = "300"}
-    return size
+  def url(String u, String id) {
+    try {
+      renderPng(u ?: id ?: request.getHeader("REFERER"))
+    } catch (e) {
+        render status: 400, text: e.message
+    }
   }
 
   /**
    * Renders a QRCode containing arbitrary text. This can
    * include iCal or vCard data or whatever you can come up with.
    */
-  def text = {
-    String content = params.text?:params.id
-    String size = getSize(params)
-    qrCodeService.renderPng(response, content, size.toInteger().intValue())
+  def text(String text, String id) {
+    try {
+        renderPng(text ?: id)
+    } catch (e) {
+        render status: 400, text: e.message
+    }
+  }
+
+  private int getSize(Map params) {
+    String size = params.s ?: params.size ?: params.w ?: params.width
+    if (!size || size.matches(/\D/)) { size = "300"}
+    int wantedSize = size as int
+    int maxSize = grailsApplication.config.qrcode.size.max ?: 1024
+    // make sure the specified size is within reasonable limits, to avoid DoS attacks.
+    if (wantedSize > maxSize) {
+      throw new RuntimeException("invalid size: " + wantedSize)
+    }
+    return wantedSize
+  }
+
+  protected void renderPng(String data) {
+    qrCodeService.renderPng(response, data, getSize(params))
   }
   
 }
